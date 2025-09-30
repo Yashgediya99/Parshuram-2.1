@@ -477,8 +477,6 @@
 
 
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Ticket, Attachment, ThreatLog, Log } from '../../types';
 import { X, Save, Paperclip } from 'lucide-react';
@@ -493,27 +491,31 @@ interface TicketModalProps {
 }
 
 const TicketModal: React.FC<TicketModalProps> = ({ ticket, isCreateMode, onSave, onClose, relatedLogId }) => {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(modalRef, onClose);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    severity: ticket?.severity || 'medium',
-    assignee: ticket?.assignee || 'SOC L1',
-    attachments: [] as Attachment[],
+    severity: (ticket as any)?.severity || 'medium',
+    assignee: (ticket as any)?.assignee || 'SOC L1',
+    log_refs: relatedLogId ? [relatedLogId] : [],
   });
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isCreateMode && ticket) {
-      // Safely prefill data based on the provided log/threat
-      const title = `Threat Detected: ${'message' in ticket ? ticket.message : `Log Event ${ticket.id}`}`;
+      const isThreatLog = (t: typeof ticket): t is ThreatLog => 'message' in t;
+      const title = isThreatLog(ticket) ? `Threat Detected: ${ticket.message}` : `Log Event ${ticket.id}`;
       const description = `Investigation for the following event:\n\nID: ${ticket.id}\nSource: ${ticket.source}\nDescription: ${ticket.description}`;
       
       setFormData(prev => ({
         ...prev,
         title,
         description,
-        severity: ticket.severity,
+        severity: (ticket as any).severity,
+        log_refs: ticket.id ? [ticket.id] : [],
       }));
     }
   }, [isCreateMode, ticket]);
@@ -525,32 +527,39 @@ const TicketModal: React.FC<TicketModalProps> = ({ ticket, isCreateMode, onSave,
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSaveTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, you would upload the files and get back URLs/IDs
-    const newAttachments: Attachment[] = uploadedFiles.map((file, index) => ({
-        id: `att-${Date.now()}-${index}`,
+
+    const newAttachmentObjects: Attachment[] = uploadedFiles.map(file => ({
+        id: `att-${Date.now()}-${file.name}`,
         fileName: file.name,
-        fileSize: `${(file.size / 1024).toFixed(2)} KB`,
         fileType: file.type,
+        fileSize: `${(file.size / 1024).toFixed(2)} KB`,
     }));
 
-    onSave({ ...formData, attachments: newAttachments });
+    onSave({ 
+      title: formData.title,
+      description: formData.description,
+      severity: formData.severity,
+      assignee: formData.assignee,
+      log_refs: formData.log_refs,
+      files: newAttachmentObjects,
+    });
   };
 
-  const handleInputChange = (field: keyof Omit<typeof formData, 'attachments'>, value: string) => {
+  const handleInputChange = (field: keyof Omit<typeof formData, 'log_refs'>, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-gray-800 border border-gray-700 rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+      <div className="bg-gray-800 border border-gray-700 rounded-lg max-w-2xl w-full max-h-[85vh] overflow-y-auto" ref={modalRef}>
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <h2 className="text-xl font-bold text-white">Create New Ticket</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white"><X/></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSaveTicket} className="p-6 space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">Title <span className="text-red-400">*</span></label>
             <input type="text" required className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg" value={formData.title} onChange={(e) => handleInputChange('title', e.target.value)} />
@@ -560,6 +569,34 @@ const TicketModal: React.FC<TicketModalProps> = ({ ticket, isCreateMode, onSave,
             <textarea required rows={4} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded-lg" value={formData.description} onChange={(e) => handleInputChange('description', e.target.value)} />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Severity <span className="text-red-400">*</span></label>
+              <select value={formData.severity} onChange={(e) => handleInputChange('severity', e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+             <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Assign to (Level) <span className="text-red-400">*</span></label>
+              <select value={formData.assignee} onChange={(e) => handleInputChange('assignee', e.target.value)} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="SOC L1">SOC L1</option>
+                <option value="SOC L2">SOC L2</option>
+                <option value="SOC L3">SOC L3</option>
+                <option value="SOC L4">SOC L4</option>
+              </select>
+            </div>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Log Reference(s)</label>
+            <input type="text" disabled className="w-full px-3 py-2 bg-gray-700 border border-gray-600 text-gray-400 rounded-lg" value={formData.log_refs.join(', ')} />
+            <p className="text-xs text-gray-500 mt-1">This field is pre-populated from the selected log and is not editable.</p>
+          </div>
+          
           <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Attachments</label>
               <div className="bg-gray-700 border border-gray-600 rounded-lg p-3">

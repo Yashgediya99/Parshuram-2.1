@@ -241,12 +241,11 @@
 // export default TicketingPage;
 
 
-
 import React, { useState } from 'react';
 import { Ticket } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, Eye, Filter } from 'lucide-react';
+import { Search, Eye, Filter, Plus } from 'lucide-react';
 
 interface TicketingPageProps {
   tickets: Ticket[];
@@ -260,17 +259,42 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ tickets }) => {
     title: '',
     createdBy: '',
     log_refs: '',
-    contributors: '',
     status: [] as string[],
     severity: [] as string[],
+    contributors: '',
     startDate: '',
     endDate: ''
   });
+
+  const handleMultiSelectChange = (field: 'status' | 'severity', value: string) => {
+    const currentValues = filters[field] as string[];
+    const newValues = currentValues.includes(value)
+      ? currentValues.filter(v => v !== value)
+      : [...currentValues, value];
+    setFilters({ ...filters, [field]: newValues });
+  };
+  
+  const getSeverityColor = (severity: Ticket['severity']) => {
+    switch (severity) {
+      case 'critical': return 'bg-red-900 text-red-300';
+      case 'high': return 'bg-orange-900 text-orange-300';
+      case 'medium': return 'bg-yellow-900 text-yellow-300';
+      case 'low': return 'bg-blue-900 text-blue-300';
+      case 'urgent': return 'bg-purple-900 text-purple-300';
+      default: return 'bg-gray-900 text-gray-300';
+    }
+  };
 
   const filteredTickets = tickets.filter(ticket => {
     const ticketDate = new Date(ticket.createdAt);
     const startDate = filters.startDate ? new Date(filters.startDate) : null;
     const endDate = filters.endDate ? new Date(filters.endDate) : null;
+    
+    // Corrected filter logic: A ticket is visible if the user is an admin or their role matches the current assignee.
+    const userRole = user?.role;
+    const isAssignedToUser = userRole === 'admin' || ticket.assignee.toLowerCase().replace(' ', '-') === userRole;
+    
+    if (!isAssignedToUser) return false;
 
     if (startDate && ticketDate < startDate) return false;
     if (endDate && ticketDate > endDate) return false;
@@ -278,7 +302,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ tickets }) => {
     return (
         (filters.title ? ticket.title.toLowerCase().includes(filters.title.toLowerCase()) : true) &&
         (filters.createdBy ? ticket.reporter.toLowerCase().includes(filters.createdBy.toLowerCase()) : true) &&
-        (filters.log_refs ? ticket.relatedLogId?.includes(filters.log_refs) : true) &&
+        (filters.log_refs ? ticket.log_refs?.some(ref => ref.includes(filters.log_refs)) : true) &&
         (filters.contributors ? ticket.contributors?.some(c => c.toLowerCase().includes(filters.contributors.toLowerCase())) : true) &&
         (filters.status.length > 0 ? filters.status.includes(ticket.status) : true) &&
         (filters.severity.length > 0 ? filters.severity.includes(ticket.severity) : true)
@@ -292,10 +316,12 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ tickets }) => {
                 <h1 className="text-3xl font-bold mb-2">Ticket Dashboard</h1>
                 <p className="text-gray-400">Search, filter, and manage all security tickets.</p>
             </div>
-            <button onClick={() => setShowFilters(!showFilters)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 flex items-center space-x-2">
-                <Filter className="h-4 w-4" />
-                <span>Filters</span>
-            </button>
+            <div className="flex space-x-2">
+                <button onClick={() => setShowFilters(!showFilters)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 flex items-center space-x-2">
+                    <Filter className="h-4 w-4" />
+                    <span>Filters</span>
+                </button>
+            </div>
         </div>
 
         {showFilters && (
@@ -308,11 +334,47 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ tickets }) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        {/* <label className="text-sm text-gray-400 block mb-2">Date Range</label> */}
+                        <label className="text-sm text-gray-400 block mb-2">Status</label>
+                        <div className="flex flex-wrap gap-2">
+                            {['open', 'under_review', 'closed'].map(status => (
+                                <button
+                                    key={status}
+                                    type="button"
+                                    onClick={() => handleMultiSelectChange('status', status)}
+                                    className={`px-3 py-1 rounded-full text-xs capitalize ${
+                                        filters.status.includes(status)
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-700 text-gray-300'
+                                    }`}
+                                >
+                                    {status.replace('_', ' ')}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-sm text-gray-400 block mb-2">Severity</label>
+                        <div className="flex flex-wrap gap-2">
+                            {['low', 'medium', 'high', 'critical', 'urgent'].map(severity => (
+                                <button
+                                    key={severity}
+                                    type="button"
+                                    onClick={() => handleMultiSelectChange('severity', severity)}
+                                    className={`px-3 py-1 rounded-full text-xs capitalize ${
+                                        filters.severity.includes(severity)
+                                        ? getSeverityColor(severity as Ticket['severity'])
+                                        : 'bg-gray-700 text-gray-300'
+                                    }`}
+                                >
+                                    {severity}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-sm text-gray-400 block mb-2">Date Range</label>
                         <div className="flex items-center space-x-2">
-                            <label htmlFor="startDate" className="text-xs text-gray-400">From</label>
                             <input id="startDate" type="date" value={filters.startDate} onChange={e => setFilters({...filters, startDate: e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded"/>
-                            <label htmlFor="endDate" className="text-xs text-gray-400">To</label>
                             <input id="endDate" type="date" value={filters.endDate} onChange={e => setFilters({...filters, endDate: e.target.value})} className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded"/>
                         </div>
                     </div>
@@ -328,9 +390,14 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ tickets }) => {
                         <Link to={`/tickets/${ticket.id}`} className="font-semibold text-lg text-blue-400 hover:underline">{ticket.title}</Link>
                         <p className="text-sm text-gray-400">#{ticket.id} opened by {ticket.reporter}</p>
                     </div>
-                    <span className={`px-2 py-1 text-xs font-bold rounded-full bg-${ticket.severity === 'critical' ? 'red' : 'yellow'}-900 text-${ticket.severity === 'critical' ? 'red' : 'yellow'}-300`}>
-                        {ticket.severity.toUpperCase()}
-                    </span>
+                    <div className="flex flex-col items-end space-y-1">
+                        <span className={`px-2 py-1 text-xs font-bold rounded-full capitalize ${getSeverityColor(ticket.severity)}`}>
+                            {ticket.severity}
+                        </span>
+                        <span className={`px-2 py-1 text-xs font-bold rounded-full capitalize bg-gray-700 text-gray-300`}>
+                            {ticket.status.replace('_', ' ')}
+                        </span>
+                    </div>
                 </div>
             </div>
             ))}

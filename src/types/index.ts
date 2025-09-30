@@ -395,37 +395,29 @@ export interface TicketComment {
     id: string;
     author: string;
     timestamp: string;
-    comment: string;
-    attachments?: Attachment[];
-    statusChange?: {
-        from: Ticket['status'];
-        to: Ticket['status'];
-    };
-    severityChange?: {
-        from: Ticket['severity'];
-        to: Ticket['severity'];
-    };
-    escalation?: {
-        to: string;
-        reason: string;
-    };
+    message: string;
+    status?: Ticket['status'];
+    severity?: Ticket['severity'];
+    attachments?: string[];
 }
 
 export interface Ticket {
   id: string;
   title: string;
   description: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  status: 'open' | 'triaged' | 'in-progress' | 'resolved' | 'closed';
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'urgent';
+  status: 'open' | 'under_review' | 'closed';
   assignee: string;
   reporter: string;
   createdAt: string;
   updatedAt: string;
+  log_refs?: string[];
+  files?: Attachment[];
+  updates?: TicketComment[];
+  levels?: string[];
+  contributors?: string[];
   relatedLogId?: string;
   relatedAlertId?: string;
-  comments?: TicketComment[];
-  attachments?: Attachment[];
-  contributors?: string[];
 }
 
 export interface Notification {
@@ -449,7 +441,6 @@ export interface Alert {
   acknowledgedAt?: string;
 }
 
-// UPDATED POLICY TYPE
 export interface Policy {
   id: string;
   name: string;
@@ -469,17 +460,4 @@ export interface Policy {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-}
-
-// Rule is no longer needed as a separate interface based on the new Policy structure
-export interface Rule {
-  id: string;
-  name: string;
-  description: string;
-  condition: string;
-  action: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  isActive: boolean;
-  createdBy: string;
-  createdAt: string;
 }
